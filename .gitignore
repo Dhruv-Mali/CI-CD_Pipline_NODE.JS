@@ -32,3 +32,23 @@ client/.env.local
 #api Never commit these files 
 api/serviceAccountKey.json
 client/src/firebase.js
+
+# CI/CD and Deployment
+deployment.zip
+.ebignore
+*.pem
+*.key
+
+# AWS
+.elasticbeanstalk/
+*.zip
+
+# Environment files
+.env.production
+.env.staging
+
+# Build outputs
+client/dist/
+client/build/
+.next/
+out/

@@ -1,0 +1,18 @@
+files:
+  "/etc/nginx/conf.d/proxy.conf":
+    mode: "000755"
+    owner: root
+    group: root
+    content: |
+      client_max_body_size 20M;
+      server_tokens off;
+
+      # Compression
+      gzip on;
+      gzip_comp_level 4;
+      gzip_types text/plain text/css text/js text/javascript application/javascript application/json;
+
+container_commands:
+  01_reload_nginx:
+    command: "sudo systemctl reload nginx"
+    ignoreErrors: true

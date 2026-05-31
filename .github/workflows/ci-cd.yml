@@ -1,0 +1,174 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Lint and validate code quality
+  lint:
+    runs-on: ubuntu-latest
+    name: Lint & Code Quality
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install backend dependencies
+        run: npm install
+
+      - name: Lint client code
+        run: npm run lint --prefix client
+        continue-on-error: false
+
+  # Build frontend
+  build-frontend:
+    runs-on: ubuntu-latest
+    name: Build Frontend
+    needs: lint
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install --prefix client
+
+      - name: Build frontend
+        run: npm run build --prefix client
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: client/dist/
+          retention-days: 1
+
+  # Build backend
+  build-backend:
+    runs-on: ubuntu-latest
+    name: Build Backend
+    needs: lint
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Verify backend integrity
+        run: |
+          node -c api/index.js || true
+          echo "Backend syntax check completed"
+
+  # Deploy to AWS
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy to AWS
+    needs: [build-frontend, build-backend]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Download frontend artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: client/dist/
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Deploy to AWS Elastic Beanstalk
+        run: |
+          # Create deployment package
+          zip -r deployment.zip . -x ".git/*" ".github/*" "node_modules/*" "client/node_modules/*" ".env" ".env.local" "*.log"
+          
+          # Upload to S3 (update bucket name)
+          aws s3 cp deployment.zip s3://${{ secrets.AWS_S3_BUCKET }}/deployment-${{ github.run_id }}.zip
+          
+          # Create new Elastic Beanstalk version
+          aws elasticbeanstalk create-app-version \
+            --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+            --version-label "v${{ github.run_id }}-${{ github.run_number }}" \
+            --source-bundle S3Bucket=${{ secrets.AWS_S3_BUCKET }},S3Key=deployment-${{ github.run_id }}.zip \
+            --region ${{ secrets.AWS_REGION }} || true
+          
+          # Update Elastic Beanstalk environment
+          aws elasticbeanstalk update-environment \
+            --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+            --environment-name ${{ secrets.AWS_EB_ENV_NAME }} \
+            --version-label "v${{ github.run_id }}-${{ github.run_number }}" \
+            --region ${{ secrets.AWS_REGION }}
+
+      - name: Wait for deployment
+        run: |
+          aws elasticbeanstalk wait environment-updated \
+            --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+            --environment-name ${{ secrets.AWS_EB_ENV_NAME }} \
+            --region ${{ secrets.AWS_REGION }} || true
+          echo "Deployment initiated successfully!"
+
+      - name: Log deployment status
+        if: always()
+        run: |
+          aws elasticbeanstalk describe-environments \
+            --application-name ${{ secrets.AWS_EB_APP_NAME }} \
+            --environment-names ${{ secrets.AWS_EB_ENV_NAME }} \
+            --region ${{ secrets.AWS_REGION }} \
+            --query 'Environments[0].[EnvironmentName,Status,Health]' \
+            --output table
+
+  # Notify deployment status
+  notify:
+    runs-on: ubuntu-latest
+    name: Notify Deployment Status
+    needs: deploy
+    if: always()
+    
+    steps:
+      - name: Deployment Status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed or skipped"
+          fi

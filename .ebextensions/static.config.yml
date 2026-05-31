@@ -1,0 +1,30 @@
+files:
+  "/etc/nginx/conf.d/01_static_assets.conf":
+    mode: "000755"
+    owner: root
+    group: root
+    content: |
+      # Serve static assets from the client build directory
+      location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        alias /var/app/current/client/dist$request_uri;
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+      }
+
+      # Serve frontend
+      location / {
+        try_files $uri $uri/ /index.html;
+        alias /var/app/current/client/dist/;
+      }
+
+      # API routes go to Node.js
+      location /api {
+        proxy_pass http://127.0.0.1:8081;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }

@@ -1,0 +1,25 @@
+commands:
+  01_install_build_essential:
+    command: yum install -y build-essential
+    ignoreErrors: true
+
+  02_npm_install_dependencies:
+    command: npm install
+    cwd: /var/app/current
+
+  03_npm_install_client_dependencies:
+    command: npm install
+    cwd: /var/app/current/client
+    ignoreErrors: true
+
+  04_npm_build_client:
+    command: npm run build
+    cwd: /var/app/current/client
+    ignoreErrors: true
+
+container_commands:
+  01_npm_install:
+    command: npm install
+    cwd: /var/app/current
+    leader_only: true
+    ignoreErrors: true

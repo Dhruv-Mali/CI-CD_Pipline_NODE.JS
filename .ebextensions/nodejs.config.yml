@@ -1,0 +1,31 @@
+option_settings:
+  aws:elasticbeanstalk:container:nodejs:
+    NodeCommand: "node api/index.js"
+    GzipCompression: true
+
+  aws:autoscaling:launchconfiguration:
+    IamInstanceProfile: aws-elasticbeanstalk-ec2-role
+    InstanceType: t3.micro
+
+  aws:elasticbeanstalk:application:environment:
+    NODE_ENV: production
+
+  aws:elasticbeanstalk:xray:
+    XRayEnabled: false
+
+  aws:autoscaling:asg:
+    MinSize: 1
+    MaxSize: 3
+
+  aws:elasticbeanstalk:cloudwatch:logs:
+    StreamLogs: true
+    DeleteOnTerminate: false
+    RetentionInDays: 7
+
+files:
+  "/opt/elasticbeanstalk/tasks/bundlelogs.d/01_nodejslogs.conf":
+    mode: "000755"
+    owner: root
+    group: root
+    content: |
+      /var/log/nodejs/nodejs.log
