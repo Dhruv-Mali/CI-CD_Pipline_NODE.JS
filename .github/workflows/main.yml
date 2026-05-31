@@ -16,7 +16,7 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.PASSWORD }}
-          port: ${{ secrets.PORT }}
+          port: 2222
 
           script: |
             cd /var/www/CI-CD_Pipline_NODE.JS
